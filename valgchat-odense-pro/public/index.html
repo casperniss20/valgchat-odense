@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Valgchat Odense 2025</title>
+  <style>
+    :root { --b:#0a7d40; --u:#0a58ca; }
+    body { font-family: system-ui, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; }
+    .chat { min-height: 340px; background: #fafafa; }
+    .msg { margin: 10px 0; white-space: pre-wrap; }
+    .user { color: var(--u); }
+    .assistant { color: var(--b); }
+    .meta { font-size: 12px; color: #555; }
+    .row { display: flex; gap: 8px; }
+    textarea { width: 100%; min-height: 72px; padding: 8px; }
+    button { padding: 8px 12px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; }
+    button.primary { background: var(--b); color: white; border-color: var(--b); }
+  </style>
+</head>
+<body>
+  <h1>Valgchat Odense 2025</h1>
+  <p class="meta">Session: <span id="pid">(ukendt)</span> · Tid tilbage: <span id="timer">10:00</span> · Beskeder: <span id="count">0</span></p>
+  <div id="chat" class="card chat"></div>
+
+  <div class="card" style="margin-top:12px">
+    <textarea id="inp" placeholder="Skriv din besked… (Ctrl/Cmd+Enter for at sende)"></textarea>
+    <div class="row" style="justify-content: space-between; align-items: center; margin-top:8px;">
+      <div class="meta">Tip: Hold dig til kommunalvalget i Odense 2025.</div>
+      <div class="row">
+        <button id="copy">Kopiér samtale</button>
+        <button id="send" class="primary">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="justify-content: flex-end; margin-top:8px;">
+    <button id="finish">Afslut og gå tilbage</button>
+  </div>
+
+  <script>
+    const pid = new URLSearchParams(location.search).get("pid") || "anon";
+    document.getElementById("pid").textContent = pid;
+
+    const chatEl = document.getElementById("chat");
+    const inpEl = document.getElementById("inp");
+    const sendBtn = document.getElementById("send");
+    const copyBtn = document.getElementById("copy");
+    const finishBtn = document.getElementById("finish");
+    const timerEl = document.getElementById("timer");
+    const countEl = document.getElementById("count");
+
+    let history = [];
+    let count = 0;
+
+    function addMsg(role, text) {
+      const div = document.createElement("div");
+      div.className = "msg " + role;
+      div.textContent = (role === "user" ? "Du: " : "Chat: ") + text;
+      chatEl.appendChild(div);
+      chatEl.scrollTop = chatEl.scrollHeight;
+      if (role !== "system") {
+        count++;
+        countEl.textContent = String(count);
+      }
+    }
+
+    addMsg("assistant", "Hej! Jeg er valgchatten for kommunalvalget i Odense 2025. Hvad er vigtigst for dig i kommunen? Vil du have korte eller mere uddybende svar?");
+
+    async function sendMsg() {
+      const txt = (inpEl.value || "").trim();
+      if (!txt) return;
+      addMsg("user", txt);
+      inpEl.value = "";
+      sendBtn.disabled = true;
+
+      try {
+        const r = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ participant_id: pid, messages: history, user_text: txt })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data?.error || "Ukendt fejl");
+        addMsg("assistant", data.reply || "(tomt svar)");
+        history = data.messages || history;
+      } catch (e) {
+        addMsg("assistant", "Der opstod en fejl. Prøv igen om lidt.");
+        console.error(e);
+      } finally {
+        sendBtn.disabled = false;
+        inpEl.focus();
+      }
+    }
+
+    sendBtn.onclick = sendMsg;
+    inpEl.addEventListener("keydown", e => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) sendMsg();
+    });
+
+    copyBtn.onclick = () => {
+      const transcript = (history.length ? history : []).map(m => `${m.role}: ${m.content}`).join("\n\n");
+      const preseed = `assistant: Hej! Jeg er valgchatten for kommunalvalget i Odense 2025. Hvad er vigtigst for dig i kommunen? Vil du have korte eller mere uddybende svar?`;
+      const text = preseed + (transcript ? ("\n\n" + transcript) : "");
+      navigator.clipboard.writeText(text).then(()=>{
+        alert("Samtalen er kopieret – indsæt den i spørgeskemaet (tekstfeltet i næste trin).");
+      });
+    };
+
+    // 10-minutters timer
+    let seconds = 10 * 60;
+    const tick = () => {
+      const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+      const s = String(seconds % 60).toString().padStart(2, "0");
+      timerEl.textContent = `${m}:${s}`;
+      if (seconds > 0) seconds--; else clearInterval(handle);
+    };
+    const handle = setInterval(tick, 1000); tick();
+
+    finishBtn.onclick = () => {
+      alert("Tak for samtalen! Vend tilbage til spørgeskema-fanen og klik Næste.");
+    };
+  </script>
+</body>
+</html>
